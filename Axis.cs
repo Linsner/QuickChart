@@ -50,6 +50,8 @@ namespace QuickChart
 
     public class XAxis : Axis
     {
+        public string Labels { get; set; }
+
         public XAxis(float min, float max, float labelSpacing, bool paintLabels, bool paintGrid, Pen gridPen, Brush labelBrush, string labelFormatString, Font font) :
             base(min, max, labelSpacing, paintLabels, paintGrid, gridPen, labelBrush, labelFormatString, font)
         {
