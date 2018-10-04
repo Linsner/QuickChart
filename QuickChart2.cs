@@ -20,8 +20,8 @@ namespace QuickChart
                 return new RectangleF(
                   Padding.Left,
                   Padding.Top,
-                  Width - Padding.Horizontal,
-                  Height - Padding.Vertical);
+                  Width - Padding.Horizontal - 1,
+                  Height - Padding.Vertical - 1);
             }
         }
 
