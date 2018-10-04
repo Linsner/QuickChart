@@ -41,14 +41,11 @@ namespace QuickChart
             float xMin = -numberOfValues * timeStepInSeconds;
             float xMax = 0;
             float xSpacing = (float)Math.Round(Math.Abs(xMin / 3));
-            float yMin = 0;
-            float yMax = 100;
-            float ySpacing = 50;
 
             Font = headerFont;
             Text = header;
             XAxis = new XAxis(xMin, xMax, xSpacing, true, true, gridPen, labelBrush, "{0:;#s;0}", labelFont);
-            YAxis = new YAxis(yMin, yMax, ySpacing, true, true, gridPen, labelBrush, "{0:0.#\\%;;0}", labelFont, HorizontalAlignment.Right);
+            YAxis = YAxis.PercentAxis(50, gridPen, labelBrush, labelFont, HorizontalAlignment.Right);
             
             _cpuSeries = new ContinousSeries();
             _cpuSeries.Brush = seriesBrush;

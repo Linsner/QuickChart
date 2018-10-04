@@ -17,14 +17,46 @@ namespace QuickChart
         public float Scale => (ScreenMax - ScreenMin) / (Max - Min);
         public float LabelSpacing { get; set; }
         public bool PaintLabels { get; set; }
+        protected float LabelMargin => Font.Size * 0.3f;
         public bool PaintGrid { get; set; }
         public Pen GridPen { get; set; }
         public Brush LabelBrush { get; set; }
         public string LabelFormatString { get; set; } = "";
         public Font Font { get; set; }
 
+        protected Dictionary<float, string> _labels;
+
         protected Axis(float min, float max, float labelSpacing, bool paintLabels, bool paintGrid, Pen gridPen, Brush labelBrush, string labelFormatString, Font font)
         {
+            Initialize(min, max, labelSpacing, paintLabels, paintGrid, gridPen, labelBrush, labelFormatString, font);
+        }
+
+        protected Axis(float min, float max, float labelSpacing, Pen gridPen, Brush labelBrush, string labelFormatString, Font font)
+        {
+            Initialize(min, max, labelSpacing, true, true, gridPen, labelBrush, labelFormatString, font);
+        }
+
+        protected Axis(float min, float max, string[] labels, float[] labelValues, Pen gridPen, Brush labelBrush, Font font)
+        {
+            Initialize(min, max, 0, true, true, gridPen, labelBrush, "", font);
+            for (int i = 0; i < labels.Length && i < labelValues.Length; i++)
+            {
+                AddLabel(labelValues[i], labels[i]);
+            }
+        }
+
+        protected Axis(float min, float max)
+        {
+            Initialize(min, max, 0, false, false, null, null, null, null);
+        }
+
+        private void Initialize(float min, float max, float labelSpacing, bool paintLabels, bool paintGrid, Pen gridPen, Brush labelBrush, string labelFormatString, Font font)
+        {
+            if (min >= max)
+                throw new ArgumentException(nameof(min));
+            if (labelSpacing < 0)
+                throw new ArgumentException(nameof(labelSpacing));
+
             Min = min;
             Max = max;
             LabelSpacing = labelSpacing;
@@ -39,54 +71,88 @@ namespace QuickChart
                 Font = font ?? throw new ArgumentNullException(nameof(font));
             }
         }
-        
-        //protected Axis()
-        //{
-        //    LabelSpacing = float.NaN;
-        //    PaintLabels = true;
-        //    PaintGrid = true;
-        //}
-    }
 
-    public class XAxis : Axis
-    {
-        public string Labels { get; set; }
-
-        public XAxis(float min, float max, float labelSpacing, bool paintLabels, bool paintGrid, Pen gridPen, Brush labelBrush, string labelFormatString, Font font) :
-            base(min, max, labelSpacing, paintLabels, paintGrid, gridPen, labelBrush, labelFormatString, font)
+        public void AddLabel(float value, string label)
         {
+            if (_labels == null)
+                _labels = new Dictionary<float, string>();
+            _labels.Add(value, label);
         }
-        
-        public void Paint(Graphics g, RectangleF chartArea)
-        {
-            ScreenMin = chartArea.Left;
-            ScreenMax = chartArea.Right;
 
-            float y1 = chartArea.Top;
-            float y2 = chartArea.Bottom;
+        public void ClearLabels()
+        {
+            _labels = null;
+        }
+
+        protected Dictionary<float, string> GenerateLabels()
+        {
+            Dictionary<float, string> labels = new Dictionary<float, string>();
 
             float start = Math.Abs(Min % LabelSpacing) + Min;
 
             for (float f = start; f <= Max; f += LabelSpacing)
             {
-                float x = GetXOnScreen(f);
+                string text = string.Format(LabelFormatString, f);
+                labels.Add(f, text);
+            }
+
+            return labels;
+        }
+
+        public abstract void Paint(Graphics g, RectangleF chartArea);
+    }
+
+    public class XAxis : Axis
+    {
+        public XAxis(float min, float max, float labelSpacing, bool paintLabels, bool paintGrid, Pen gridPen, Brush labelBrush, string labelFormatString, Font font) :
+            base(min, max, labelSpacing, paintLabels, paintGrid, gridPen, labelBrush, labelFormatString, font)
+        { }
+
+        protected XAxis(float min, float max, float labelSpacing, Pen gridPen, Brush labelBrush, string labelFormatString, Font font) :
+            base(min, max, labelSpacing, gridPen, labelBrush, labelFormatString, font)
+        { }
+
+        protected XAxis(float min, float max, string[] labels, float[] labelValues, Pen gridPen, Brush labelBrush, Font font) :
+            base(min, max, labels, labelValues, gridPen, labelBrush, font)
+        { }
+
+        protected XAxis(float min, float max) : base(min, max) { }
+
+        public override void Paint(Graphics g, RectangleF chartArea)
+        {
+            ScreenMin = chartArea.Left;
+            ScreenMax = chartArea.Right;
+
+            PaintGridAndLabels(g, chartArea, _labels ?? GenerateLabels());
+        }
+
+        private void PaintGridAndLabels(Graphics g, RectangleF chartArea, Dictionary<float, string> labels)
+        {
+            foreach (var label in labels)
+            {
+                float x = GetXOnScreen(label.Key);
 
                 if (PaintGrid)
-                    g.DrawLine(GridPen, x, y1, x, y2);
+                    g.DrawLine(GridPen, x, chartArea.Top, x, chartArea.Bottom);
 
                 if (PaintLabels)
-                {
-                    string text = string.Format(LabelFormatString, f);
-                    SizeF sizeOfText = g.MeasureString(text, Font);
-                    float xText = x - sizeOfText.Width / 2;
-                    float yText = y2 + Font.Size * 0.3f;
-                    xText = Math.Max(xText, ScreenMin);
-                    xText = Math.Min(xText, ScreenMax - sizeOfText.Width);
-
-                    //if (xText > ScreenMin && xText + sizeOfText.Width < ScreenMax)
-                    g.DrawString(text, Font, LabelBrush, xText, yText);
-                }
+                    PaintLabel(g, label.Value, x, chartArea.Bottom);
             }
+        }
+
+        private void PaintLabel(Graphics g, string label, float xOnScreen, float yOnScreen)
+        {
+            SizeF sizeOfText = g.MeasureString(label, Font);
+
+            // position of text on screen
+            float xText = xOnScreen - sizeOfText.Width / 2;
+            float yText = yOnScreen + LabelMargin;
+
+            // align text with chart borders
+            xText = Math.Max(xText, ScreenMin);
+            xText = Math.Min(xText, ScreenMax - sizeOfText.Width);
+
+            g.DrawString(label, Font, LabelBrush, xText, yText);
         }
 
         internal float GetXOnScreen(float x)
@@ -99,17 +165,20 @@ namespace QuickChart
             if (!PaintLabels)
                 return 0;
 
-            float start = Math.Abs(Min % LabelSpacing) + Min;
             float maxHeight = 0;
 
-            for (float f = start; f <= Max; f += LabelSpacing)
+            foreach (var label in _labels ?? GenerateLabels())
             {
-                string text = string.Format(LabelFormatString, f);
-                SizeF sizeOfText = g.MeasureString(text, Font);
-                maxHeight = Math.Max(maxHeight, sizeOfText.Height + Font.Size * 0.3f);
+                SizeF sizeOfText = g.MeasureString(label.Value, Font);
+                maxHeight = Math.Max(maxHeight, sizeOfText.Height + LabelMargin);
             }
 
             return maxHeight;
+        }
+
+        public static XAxis TrigonometryAxis(Pen gridPen, Brush labelBrush, Font font)
+        {
+            return new XAxis(0, (float)(Math.PI * 2), new string[] { "0", "π", "2π" }, new float[] { 0, (float)Math.PI, (float)(Math.PI * 2) }, gridPen, labelBrush, font);
         }
     }
 
@@ -122,40 +191,61 @@ namespace QuickChart
         {
             HorizontalAlignment = horizontalAlignment;
         }
-        
-        public void Paint(Graphics g, RectangleF chartArea)
+
+        protected YAxis(float min, float max, float labelSpacing, Pen gridPen, Brush labelBrush, string labelFormatString, Font font, HorizontalAlignment horizontalAlignment) :
+            base(min, max, labelSpacing, gridPen, labelBrush, labelFormatString, font)
+        {
+            HorizontalAlignment = horizontalAlignment;
+        }
+
+        protected YAxis(float min, float max, string[] labels, float[] labelValues, Pen gridPen, Brush labelBrush, Font font, HorizontalAlignment horizontalAlignment) :
+            base(min, max, labels, labelValues, gridPen, labelBrush, font)
+        {
+            HorizontalAlignment = horizontalAlignment;
+        }
+
+        protected YAxis(float min, float max) : base(min, max) { }
+
+        public override void Paint(Graphics g, RectangleF chartArea)
         {
             ScreenMin = chartArea.Top;
             ScreenMax = chartArea.Bottom;
 
-            float x1 = chartArea.Left;
-            float x2 = chartArea.Right;
+            PaintGridAndLabels(g, chartArea, _labels ?? GenerateLabels());
+        }
 
-            float start = Math.Abs(Min % LabelSpacing) + Min;
-
-            for (float f = start; f <= Max; f += LabelSpacing)
+        private void PaintGridAndLabels(Graphics g, RectangleF chartArea, Dictionary<float, string> labels)
+        {
+            foreach (var label in labels)
             {
-                float y = GetYOnScreen(f);
+                float y = GetYOnScreen(label.Key);
 
                 if (PaintGrid)
-                    g.DrawLine(GridPen, x1, y, x2, y);  //draw grid
+                    g.DrawLine(GridPen, chartArea.Left, y, chartArea.Right, y);
 
                 if (PaintLabels)
                 {
-                    string text = string.Format(LabelFormatString, f);
-                    SizeF sizeOfText = g.MeasureString(text, Font);
-                    float xText =
-                        HorizontalAlignment == HorizontalAlignment.Left ? x1 - sizeOfText.Width - Font.Size * 0.3f :
-                        HorizontalAlignment == HorizontalAlignment.Right ? x2 + Font.Size * 0.3f :
-                        throw new ArgumentException();
-                    float yText = y - sizeOfText.Height / 2;
-                    yText = Math.Max(yText, ScreenMin);
-                    yText = Math.Min(yText, ScreenMax - sizeOfText.Height);
-
-                    //if (yText > ScreenMin && yText + sizeOfText.Height < ScreenMax)
-                    g.DrawString(text, Font, LabelBrush, xText, yText);
+                    float x = HorizontalAlignment == HorizontalAlignment.Left ? chartArea.Left : chartArea.Right;
+                    PaintLabel(g, label.Value, x, y);
                 }
             }
+        }
+
+        private void PaintLabel(Graphics g, string label, float xOnScreen, float yOnScreen)
+        {
+            SizeF sizeOfText = g.MeasureString(label, Font);
+
+            // position of text on screen
+            float xText =
+                HorizontalAlignment == HorizontalAlignment.Left ? xOnScreen - sizeOfText.Width - LabelMargin :
+                xOnScreen + LabelMargin; // HorizontalAlignment == HorizontalAlignment.Right
+            float yText = yOnScreen - sizeOfText.Height / 2;
+
+            // align text with chart borders
+            yText = Math.Max(yText, ScreenMin);
+            yText = Math.Min(yText, ScreenMax - sizeOfText.Height);
+
+            g.DrawString(label, Font, LabelBrush, xText, yText);
         }
 
         internal float GetYOnScreen(float y)
@@ -168,17 +258,25 @@ namespace QuickChart
             if (!PaintLabels)
                 return 0;
 
-            float start = Math.Abs(Min % LabelSpacing) + Min;
             float maxWidth = 0;
 
-            for (float f = start; f <= Max; f += LabelSpacing)
+            foreach (var label in _labels ?? GenerateLabels())
             {
-                string text = string.Format(LabelFormatString, f);
-                SizeF sizeOfText = g.MeasureString(text, Font);
-                maxWidth = Math.Max(maxWidth, sizeOfText.Width + Font.Size * 0.3f);
+                SizeF sizeOfText = g.MeasureString(label.Value, Font);
+                maxWidth = Math.Max(maxWidth, sizeOfText.Width + LabelMargin);
             }
 
             return maxWidth;
+        }
+
+        public static YAxis TrigonometryAxis(Pen gridPen, Brush labelBrush, Font font, HorizontalAlignment horizontalAlignment)
+        {
+            return new YAxis(-1, 1, new string[] { "-1", "0", "1" }, new float[] { -1, 0, 1 }, gridPen, labelBrush, font, horizontalAlignment);
+        }
+
+        public static YAxis PercentAxis(float labelSpacing, Pen gridPen, Brush labelBrush, Font font, HorizontalAlignment horizontalAlignment)
+        {
+            return new YAxis(0, 100, labelSpacing, true, true, gridPen, labelBrush, "{0:0.#\\%;;0}", font, horizontalAlignment);
         }
     }
 }
