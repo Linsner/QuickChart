@@ -79,7 +79,7 @@ namespace QuickChart
                 interfaces = NetworkInterface.GetAllNetworkInterfaces();
             }
 
-            UpdateYLabelFormatString();
+            UpdateYLabels();
 
             timer = new Timer();
             timer.Interval = (int)(timeStepInSeconds * 1000f);
@@ -110,29 +110,48 @@ namespace QuickChart
             _sentSeries.RemoveFirstYAndAddY(deltaSentInKBit);
             _recievedSeries.RemoveFirstYAndAddY(deltaRecievedInKBit);
 
-            UpdateYLabelFormatString();
+            UpdateYLabels();
 
             Invalidate();
         }
 
-        private void UpdateYLabelFormatString()
+        private void UpdateYLabels()
         {
             AutoZoomY();
-            float max = YAxis.Max;
-            if (max < 1024)
-            {
-                YAxis.LabelFormatString = "{0:0.# KBit;;0}";
-            }
-            else if (max < 1024 * 1024)
-            {
-                YAxis.LabelFormatString = "{0:#, MBit;;0}";
-            }
-            else
-            {
-                YAxis.LabelFormatString = "{0:#,, GBit;;0}";
-            }
 
-            YAxis.LabelSpacing = (float)Math.Truncate(max / 3);
+            float max = YAxis.Max;
+            //string formatString =
+            //    max < 1024 ? "{0:0.# KBit;;0}" :
+            //    (max < 1024 * 1024) ? "{0:#, MBit;;0}" :
+            //    "{0:#,, GBit;;0}";
+            string unitString =
+                max < 1024 ? "KBit" :
+                (max < 1024 * 1024) ? "MBit" :
+                "GBit";
+            float divisor =
+                max < 1024 ? 1 :
+                (max < 1024 * 1024) ? 1024 :
+                1024 * 1024;
+
+            YAxis.ClearLabels();
+            YAxis.AddLabel(0, "0");
+            YAxis.AddLabel(max / 2, Math.Round(max / divisor / 2, 1) + " " + unitString);
+            YAxis.AddLabel(max, Math.Round(max / divisor, 1) + " " + unitString);
+
+            //if (max < 1024)
+            //{
+            //    YAxis.LabelFormatString = "{0:0.# KBit;;0}";
+            //}
+            //else if (max < 1024 * 1024)
+            //{
+            //    YAxis.LabelFormatString = "{0:#, MBit;;0}";
+            //}
+            //else
+            //{
+            //    YAxis.LabelFormatString = "{0:#,, GBit;;0}";
+            //}
+
+            //YAxis.LabelSpacing = (float)Math.Truncate(max / 3);
         }
 
         public override void AddSeries(Series series)
